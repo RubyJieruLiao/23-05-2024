@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from dynamics import Dynamics  # 假设Dynamics类已经定义
+from Dynamics import Dynamics  # 假设Dynamics类已经定义
 
 # Loading the patient-specific network 
 patient_name = 'P1'
