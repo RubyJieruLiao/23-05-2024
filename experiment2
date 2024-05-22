@@ -1,0 +1,102 @@
+#Experiment2: Whole seizure process’s EEG data
+#Source paper: < Linear feedback control of spreading dynamics in stochastic
+                             nonlinear network models: epileptic seizures>
+#Subject: Fig3
+#Language: Python
+
+import numpy as np
+import matplotlib.pyplot as plt
+from dynamics import Dynamics  # 假设Dynamics类已经定义
+
+# Loading the patient-specific network 
+patient_name = 'P2'
+EZ_ind = 60 - 1  # 设置 node 60 为 EZ 节点
+EZ = np.array([EZ_ind])
+noise_strength = 0.05
+
+connectivity_file = "connectivity_" + patient_name + ".zip"
+network_directory = "../data/"
+
+# Loading the weights matrix
+W = get_data(network_directory + connectivity_file, 'weights.txt')
+# Normalizing the weights matrix 
+W_normal = normalize(W, "global")
+N = W_normal.shape[0]
+
+# Simulation time bin
+h = 0.02  # Adjust the time step to 0.02 seconds
+# Speed of interactions in units of epileptor dynamics equivalent to 3000mm/sec
+speed = 60.0  
+Tau_normal = get_data(network_directory + connectivity_file, 'tract_lengths.txt') / speed
+Tau = (Tau_normal / h).astype(int)
+t0 = np.max(Tau)
+
+# Setting up the simulation
+# Total simulation time in units of epileptor. Divide by 50 to get time in seconds
+simulation_time = 60.0 * 50  # 60 秒的模拟时间
+# Time that the EZ node becomes active (EZ_x0 --> -1.6)
+t_EZ_onset = 20.0 * 50  # EZ 节点在 20 秒时激活
+EZ_x0 = -1.6
+# Total number of time bins in the simulation
+M = t0 + int(simulation_time / h)
+# The timebin at which the simulation starts
+M0 = t0 + int(t_EZ_onset / h)
+# Setting the random seed
+seed = int(1000 * time.time())
+seed = np.mod(seed, 2**31) + 1
+
+# Global connectivity 
+w = 0.9  # Adjusted according to the paper
+# Surround excitability
+x0 = -2.1  # Adjusted according to the paper
+
+# The network
+Network = {
+    "h": h,
+    "Tau": Tau,
+    "W": W_normal * w,
+    "N": N,
+    "t0": t0,
+    "M": M,
+    "EZs": EZ
+}
+
+# Epileptor parameters
+epileptor_6D = {
+    "model_name": "epileptor",
+    "model_dimension": 6,
+    "I1": 3.1,  
+    "I2": 0.45,  
+    "r": 0.00015,  
+    "tau2": 10.0,   
+    "gamma": 0.01,
+    "m": 0.00,
+    "x0": np.ones(N) * x0
+}
+
+# Creating a simulation object from the Dynamics class
+Y = Dynamics(epileptor_6D, "Runge_Kutta_2", Network)
+# Setting the initial conditions for the 6 variables of the dynamics 
+Y.Set_Initial_Condition([-1.6, -12.0, 3.2, 0.00, 0.00, -160])
+# Set the noise (Same convention as initial conditions)
+Y.Set_noise([0.0, 0.0, 0.0, noise_strength, noise_strength, 0.0], seed)
+# Forcing refractory state after seizure termination
+Y.refractory = True
+# Running the simulation
+Y.run(t_EZ_onset, EZ_x0)
+
+# Plotting
+plt.figure(figsize=(10, 20))
+t1 = -20 * 50  # 从 -20 秒开始
+t2 = 40 * 50  # 到 40 秒结束
+for i in range(N):
+    if i == EZ_ind:
+        plt.plot(Y.T_axis[t1:t2] / 50 - 20, 0.2 * Y.Y[t1:t2, i] + i + 1, '-r')  # Time axis adjusted to start from -20s
+    else:
+        plt.plot(Y.T_axis[t1:t2] / 50 - 20, 0.2 * Y.Y[t1:t2, i] + i + 1, '-k')  # Time axis adjusted to start from -20s
+
+plt.xlabel('Time [s]')  
+plt.ylabel('Node index')
+plt.rcParams['font.size'] = '32'
+print('seizure size =', np.sum(Y.seizure_01 / 2))
+plt.show()
